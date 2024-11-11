@@ -8,6 +8,16 @@ The ARC.AFS file is an uncompressed packed file containing several files used by
 * Models - 3D objects in LDP and LFM format
 * Other data - Data nested several layers deep in DAR format. This includes item descriptions, game dialog, system messages. The application focuses primarily on this data.
 
+# Screenshots
+
+![image](https://github.com/user-attachments/assets/eb67a938-295b-418e-8d2c-747393a8c03d)
+
+![image](https://github.com/user-attachments/assets/96bb228d-21d4-4fc0-a333-3d58fb2c8893)
+
+![image](https://github.com/user-attachments/assets/17284843-0bfb-45f3-a079-d7c1840d3116)
+
+![image](https://github.com/user-attachments/assets/b1c3b4ec-ffae-461f-802e-749d40845047)
+
 # Requirements
 
 * .NET 8.0 Desktop Runtime
