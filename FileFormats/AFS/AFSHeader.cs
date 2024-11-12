@@ -1,4 +1,4 @@
-﻿namespace FileFormats;
+﻿namespace FileFormats.AFS;
 
 public class AFSHeader
 {

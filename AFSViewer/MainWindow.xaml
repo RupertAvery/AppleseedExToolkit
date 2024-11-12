@@ -11,50 +11,98 @@
     <Window.Resources>
         <ResourceDictionary>
             <local:VisibilityConverter x:Key="VisibilityConverter"></local:VisibilityConverter>
+            <local:CheckedConverter x:Key="CheckedConverter"></local:CheckedConverter>
         </ResourceDictionary>
     </Window.Resources>
     <Grid Margin="3">
         <Grid.RowDefinitions>
-            <RowDefinition Height="24"/>
+            <RowDefinition Height="20"/>
             <RowDefinition/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="200"/>
-            <ColumnDefinition/>
+            <ColumnDefinition Width="200" MinWidth="50"/>
+            <ColumnDefinition Width="5"/>
+            <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
         <Menu Grid.ColumnSpan="2" Grid.Row="0">
             <MenuItem Header="_File">
                 <MenuItem Header="_Open Archive" Command="{Binding OpenArchiveCommand}"></MenuItem>
             </MenuItem>
-            <Label Padding="3,3,6,3">Data View:</Label>
-            <ComboBox Width="100" ItemsSource="{Binding BinViewItems}" SelectedValue="{Binding BinView}">
-            </ComboBox>
+            <MenuItem Header="_View">
+                <MenuItem IsChecked="{Binding BinView, Converter={StaticResource CheckedConverter}, ConverterParameter=Hexadecimal}" Header="Hexadecimal" Command="{Binding SetDataViewCommand}" CommandParameter="Hexadecimal"></MenuItem>
+                <MenuItem IsChecked="{Binding BinView, Converter={StaticResource CheckedConverter}, ConverterParameter=Shift-JIS}" Header="Shift-JIS" Command="{Binding SetDataViewCommand}" CommandParameter="Shift-JIS"></MenuItem>
+                <MenuItem IsChecked="{Binding BinView, Converter={StaticResource CheckedConverter}, ConverterParameter=Item}" Header="Item" Command="{Binding SetDataViewCommand}" CommandParameter="Item"></MenuItem>
+            </MenuItem>
         </Menu>
-        <TreeView Grid.Row="1" ItemsSource="{Binding Nodes}" TreeViewItem.Expanded="TreeViewItem_Expanded" SelectedItemChanged="TreeView_OnSelectedItemChanged"    Grid.Column="0">
+
+        <TreeView 
+            AllowDrop="True"
+            Drop="UIElement_OnDrop"
+            IsTextSearchEnabled="True"  
+            Grid.Column="0" Grid.Row="1" 
+            ItemsSource="{Binding Nodes}" 
+            TreeViewItem.Expanded="TreeViewItem_Expanded" 
+            SelectedItemChanged="TreeView_OnSelectedItemChanged">
             <TreeView.ItemContainerStyle>
                 <Style TargetType="{x:Type TreeViewItem}">
                     <EventSetter Event="MouseDoubleClick" Handler="OnItemMouseDoubleClick" />
                 </Style>
             </TreeView.ItemContainerStyle>
+            <TreeView.ItemTemplate>
+                <HierarchicalDataTemplate DataType="{x:Type local:TreeNode}" ItemsSource="{Binding Children}">
+                    <TextBlock Text="{Binding Name}" />
+                </HierarchicalDataTemplate>
+            </TreeView.ItemTemplate>
+            <TreeView.ContextMenu>
+                <ContextMenu>
+                    <MenuItem IsEnabled="{Binding IsNodeSelected}" Header="Extract" Command="{Binding ExtractNodeCommand}"></MenuItem>
+                </ContextMenu>
+            </TreeView.ContextMenu>
         </TreeView>
-        <Grid Visibility="{Binding ImageVisibility}" Grid.Column="1" Grid.Row="1" Background="Black">
-            <Image Stretch="None" Source="{Binding Image}"></Image>
-        </Grid>
-        <Grid Visibility="{Binding TextVisibility}" Grid.Column="1" Grid.Row="1">
-            <Grid Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Item}" >
-                <StackPanel>
-                    <Label>Item Text 1</Label>
-                    <TextBox IsReadOnly="True" Text="{Binding Item1}" FontSize="20"></TextBox>
-                    <Label>Item Text 2</Label>
-                    <TextBox IsReadOnly="True" Text="{Binding Item2}" FontSize="20"></TextBox>
-                    <Label>Item Text 3</Label>
-                    <TextBox IsReadOnly="True" Text="{Binding Item3}" FontSize="20"></TextBox>
-                    <Label>Item Text 4</Label>
-                    <TextBox IsReadOnly="True" Text="{Binding Item4}" FontSize="20"></TextBox>
-                </StackPanel>
+
+        <GridSplitter HorizontalAlignment="Center"
+                      VerticalAlignment="Stretch"  
+                      Width="5" Grid.Column="1" Grid.Row="1"></GridSplitter>
+
+        <Grid Grid.Column="2" Grid.Row="1" >
+            <Grid Visibility="{Binding ImageVisibility}" Background="Black">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                    <Image Stretch="None" Source="{Binding Image}"></Image>
+                </ScrollViewer>
             </Grid>
-            <TextBox Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Shift-JIS}" IsReadOnly="True" Text="{Binding Data}" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" FontSize="20"></TextBox>
-            <TextBox Foreground="#55A" Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Hexadecimal}" FontFamily="Consolas" IsReadOnly="True" Text="{Binding Data}" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" FontSize="20"></TextBox>
+            <Grid Visibility="{Binding TextVisibility}">
+                <Grid.RowDefinitions>
+                    <RowDefinition MinHeight="50"/>
+                    <RowDefinition Height="5"/>
+                    <RowDefinition MinHeight="50"/>
+                </Grid.RowDefinitions>
+
+                <Grid Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Item}" >
+                    <ScrollViewer>
+                        <StackPanel>
+                            <Label>Item Text 1</Label>
+                            <TextBox IsReadOnly="True" Text="{Binding Item1}" FontSize="20"></TextBox>
+                            <Label>Item Text 2</Label>
+                            <TextBox IsReadOnly="True" Text="{Binding Item2}" FontSize="20"></TextBox>
+                            <Label>Item Text 3</Label>
+                            <TextBox IsReadOnly="True" Text="{Binding Item3}" FontSize="20"></TextBox>
+                            <Label>Item Text 4</Label>
+                            <TextBox IsReadOnly="True" Text="{Binding Item4}" FontSize="20"></TextBox>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+
+                <TextBox Grid.Row="0" Padding="15" Background="Black" Foreground="White" Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Shift-JIS}" IsReadOnly="True" Text="{Binding Data}" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" FontSize="20"></TextBox>
+                <TextBox Grid.Row="0" Padding="15" Foreground="#55A" Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Hexadecimal}" FontFamily="Consolas" IsReadOnly="True" Text="{Binding Data}" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" FontSize="20"></TextBox>
+
+                <GridSplitter HorizontalAlignment="Stretch"
+                              VerticalAlignment="Center"  
+                              Height="5" Grid.Column="0" Grid.Row="1"></GridSplitter>
+
+                <TextBox Padding="15"  Background="Black" Foreground="White" IsEnabled="{Binding IsNodeSelected}" TextWrapping="Wrap" AcceptsReturn="True" Grid.Row="2" Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Shift-JIS}" Text="{Binding EditText}"  HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" FontSize="20"></TextBox>
+
+            </Grid>
         </Grid>
+
     </Grid>
 </Window>

@@ -1,4 +1,4 @@
-﻿namespace FileFormats;
+﻿namespace FileFormats.DAR;
 
 public class DAREntry
 {

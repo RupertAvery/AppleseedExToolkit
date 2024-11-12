@@ -7,10 +7,10 @@ namespace AFSViewer;
 
 public class MainWindowViewModel : BaseNotify
 {
-    private IEnumerable<TreeViewItem> _nodes;
+    private IEnumerable<TreeNode> _nodes;
     private string _data;
     private string _binView;
-    private TreeViewItem _selectedNode;
+    private TreeNode? _selectedNode;
     private string _item1;
     private ICommand _openArchiveCommand;
     private string _item2;
@@ -19,23 +19,44 @@ public class MainWindowViewModel : BaseNotify
     private BitmapSource _image;
     private Visibility _imageVisibility;
     private Visibility _textVisibility;
+    private ICommand _setDataView;
+    private string _editText;
+    private ICommand _extractNodeCommand;
+    private bool _isLoaded;
+    private bool _isNodeSelected;
 
     public MainWindowViewModel()
     {
-        _binView = "Item";
+        _binView = "Shift-JIS";
         _textVisibility = Visibility.Visible;
         _imageVisibility = Visibility.Hidden;
     }
 
-    public IEnumerable<string> BinViewItems => ["Shift-JIS", "Hexadecimal", "Item"];
-
-    public TreeViewItem SelectedNode
+    public bool IsLoaded
     {
-        get => _selectedNode;
-        set => SetField(ref _selectedNode, value);
+        get => _isLoaded;
+        set => SetField(ref _isLoaded, value);
     }
 
-    public IEnumerable<TreeViewItem> Nodes
+    public bool IsNodeSelected
+    {
+        get => _isNodeSelected;
+        set => SetField(ref _isNodeSelected, value);
+    }
+
+    public IEnumerable<string> BinViewItems => ["Shift-JIS", "Hexadecimal", "Item"];
+
+    public TreeNode? SelectedNode
+    {
+        get => _selectedNode;
+        set
+        {
+            SetField(ref _selectedNode, value);
+            IsNodeSelected = _selectedNode != null;
+        }
+    }
+
+    public IEnumerable<TreeNode> Nodes
     {
         get => _nodes;
         set => SetField(ref _nodes, value);
@@ -45,6 +66,12 @@ public class MainWindowViewModel : BaseNotify
     {
         get => _data;
         set => SetField(ref _data, value);
+    }
+
+    public string EditText
+    {
+        get => _editText;
+        set => SetField(ref _editText, value);
     }
 
     public ICommand OpenArchiveCommand
@@ -99,5 +126,17 @@ public class MainWindowViewModel : BaseNotify
     {
         get => _textVisibility;
         set => SetField(ref _textVisibility, value);
+    }
+
+    public ICommand SetDataViewCommand
+    {
+        get => _setDataView;
+        set => SetField(ref _setDataView, value);
+    }
+
+    public ICommand ExtractNodeCommand
+    {
+        get => _extractNodeCommand;
+        set => SetField(ref _extractNodeCommand, value);
     }
 }

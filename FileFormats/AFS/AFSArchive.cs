@@ -1,6 +1,7 @@
-﻿using System.Text;
+﻿using System.Reflection.PortableExecutable;
+using System.Text;
 
-namespace FileFormats;
+namespace FileFormats.AFS;
 
 public class AFSArchive : IDisposable
 {

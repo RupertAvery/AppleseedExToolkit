@@ -1,6 +1,6 @@
 ﻿using System.IO;
 
-namespace FileFormats
+namespace FileFormats.AFS
 {
     public class AFSEntry
     {
