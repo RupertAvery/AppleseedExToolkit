@@ -1080,6 +1080,7 @@ public partial class MainWindow : Window
         _model.Page = (lineCount / 4) + 1;
         _model.Line = ((lineCount - 1) % 4) + 1;
         _model.Character = ci - s.LastIndexOf("\n") - 1;
+        _model.Characters = TranslatedText.Text.Length;
         _model.Bytes = (int)Util.Pad((uint)EncodeShiftJIS(TranslatedText.Text).Length, 0x10);
     }
 

@@ -138,6 +138,8 @@
                         <Label Content="{Binding Line}"></Label>
                         <Label>Character:</Label>
                         <Label Content="{Binding Character}"></Label>
+                        <Label>Characters:</Label>
+                        <Label Content="{Binding Characters}"></Label>
                         <Label>Bytes:</Label>
                         <Label Content="{Binding Bytes}"></Label>
                     </StackPanel>

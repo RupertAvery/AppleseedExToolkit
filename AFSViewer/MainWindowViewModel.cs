@@ -31,6 +31,7 @@ public class MainWindowViewModel : BaseNotify
     private int _line;
     private int _character;
     private int _bytes;
+    private int _characters;
 
     public MainWindowViewModel()
     {
@@ -200,5 +201,11 @@ public class MainWindowViewModel : BaseNotify
     {
         get => _properties;
         set => SetField(ref _properties, value);
+    }
+
+    public int Characters
+    {
+        get => _characters;
+        set => SetField(ref _characters, value);
     }
 }
