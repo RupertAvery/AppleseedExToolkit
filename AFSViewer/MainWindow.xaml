@@ -91,25 +91,52 @@
             <Grid Grid.Column="0" Visibility="{Binding TextVisibility}">
                 <TextBox Grid.Column="0" Padding="15" Foreground="#55A" Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Hexadecimal}" FontFamily="Consolas" IsReadOnly="True" Text="{Binding Data}" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" FontSize="20"></TextBox>
 
-                <Grid Grid.Column="0" Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Item}" >
+                <Grid Grid.Column="0" HorizontalAlignment="Left" Width="400" Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Item}" >
+                    <Grid.RowDefinitions>
+                        <RowDefinition MinHeight="50"/>
+                        <RowDefinition Height="5"/>
+                        <RowDefinition MinHeight="50"/>
+                        <RowDefinition Height="30"/>
+                    </Grid.RowDefinitions>
+
                     <ScrollViewer>
                         <StackPanel>
-                            <Label>Item Text 1</Label>
+                            <Label>Name</Label>
                             <TextBox IsReadOnly="True" Text="{Binding Item1}" FontSize="20"></TextBox>
-                            <Label>Item Text 2</Label>
+                            <Label>Description</Label>
                             <TextBox IsReadOnly="True" Text="{Binding Item2}" FontSize="20"></TextBox>
-                            <Label>Item Text 3</Label>
+                            <Label>Type</Label>
                             <TextBox IsReadOnly="True" Text="{Binding Item3}" FontSize="20"></TextBox>
-                            <Label>Item Text 4</Label>
+                            <Label>ID</Label>
                             <TextBox IsReadOnly="True" Text="{Binding Item4}" FontSize="20"></TextBox>
+                            <Button IsEnabled="{Binding HasProject}" Height="28" Margin="0,10,0,0" Click="ItemCopy_OnClick">Copy to Clipboard</Button>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <GridSplitter HorizontalAlignment="Stretch"
+                                  VerticalAlignment="Center"  
+                                  Height="5" Grid.Column="0" Grid.Row="1"></GridSplitter>
+
+                    <ScrollViewer  Grid.Column="0" Grid.Row="2">
+                        <StackPanel>
+                            <Label>Name</Label>
+                            <TextBox IsEnabled="{Binding HasProject}" Text="{Binding EditItem1}" FontSize="20"></TextBox>
+                            <Label>Description</Label>
+                            <TextBox IsEnabled="{Binding HasProject}" Text="{Binding EditItem2}" FontSize="20"></TextBox>
+                            <Label>Type</Label>
+                            <TextBox IsEnabled="{Binding HasProject}" Text="{Binding EditItem3}" FontSize="20"></TextBox>
+                            <Label>ID</Label>
+                            <TextBox IsEnabled="{Binding HasProject}" Text="{Binding EditItem4}" FontSize="20"></TextBox>
+                            <Button IsEnabled="{Binding HasProject}" Height="28" Margin="0,10,0,0" Click="EditItemCopy_OnClick">Copy to Clipboard</Button>
+                            <Button IsEnabled="{Binding HasProject}" Height="28" Margin="0,10,0,0" Click="EditItemPaste_OnClick">Paste from Clipboard</Button>
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>
 
-                <Grid Grid.Column="0" Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Shift-JIS}">
+                <Grid Grid.Column="0" HorizontalAlignment="Left" Width="590" Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Shift-JIS}">
                     <Grid.RowDefinitions>
                         <RowDefinition MinHeight="50"/>
                         <RowDefinition Height="5"/>
+                        <RowDefinition Height="25"/>
                         <RowDefinition MinHeight="50"/>
                         <RowDefinition Height="30"/>
                     </Grid.RowDefinitions>
@@ -121,17 +148,27 @@
                      VerticalAlignment="Center"  
                      Height="5" Grid.Column="0" Grid.Row="1"></GridSplitter>
 
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"  Grid.Column="0" Grid.Row="2" Background="#F0F0F0">
+                        <RadioButton IsChecked="{Binding EditTextMode, Converter={StaticResource CheckedConverter}, ConverterParameter=Dialog}" VerticalContentAlignment="Center">Dialog</RadioButton>
+                        <RadioButton IsChecked="{Binding EditTextMode, Converter={StaticResource CheckedConverter}, ConverterParameter=Scene}" VerticalContentAlignment="Center" Margin="10,0,0,0">Scene</RadioButton>
+                    </StackPanel>
+
                     <TextBox x:Name="TranslatedText" 
+                             Grid.Row="3" 
                              KeyUp="TranslatedText_OnKeyUp"
                              GotFocus="TranslatedText_OnGotFocus"
-                             Padding="15"  Background="Black" Foreground="White" IsEnabled="{Binding IsNodeSelected}" TextWrapping="NoWrap" AcceptsReturn="True" Grid.Row="2" Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Shift-JIS}" Text="{Binding EditText}"  
+                             PreviewMouseUp="TranslatedText_OnPreviewMouseUp"
+                             Padding="15"  Background="Black" Foreground="White" IsEnabled="{Binding IsNodeSelected}" 
+                             TextWrapping="NoWrap" AcceptsReturn="True" 
+                             Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Shift-JIS}" 
+                             Text="{Binding EditText}"  
                              HorizontalScrollBarVisibility="Auto" 
                              VerticalScrollBarVisibility="Auto" 
                              FontSize="20"></TextBox>
-                    <Rectangle Grid.Row="2" Stroke="Red" Margin="15" Width="315" HorizontalAlignment="Left"></Rectangle>
-                    <Rectangle Grid.Row="2" Stroke="Blue" Margin="14" Width="505" Height="100" VerticalAlignment="Top" HorizontalAlignment="Left"></Rectangle>
+                    <Rectangle Visibility="{Binding EditTextMode, Converter={StaticResource VisibilityConverter}, ConverterParameter=Dialog}" Grid.Row="3" Stroke="Red" Margin="15" Width="315" HorizontalAlignment="Left"></Rectangle>
+                    <Rectangle Visibility="{Binding EditTextMode, Converter={StaticResource VisibilityConverter}, ConverterParameter=Scene}" Grid.Row="3" Stroke="Blue" Margin="14" Width="505" Height="100" VerticalAlignment="Top" HorizontalAlignment="Left"></Rectangle>
 
-                    <StackPanel Orientation="Horizontal" Grid.Row="3">
+                    <StackPanel Orientation="Horizontal" Grid.Row="4"  Background="#F0F0F0">
                         <Label>Page:</Label>
                         <Label Content="{Binding Page}"></Label>
                         <Label>Line:</Label>
@@ -145,11 +182,11 @@
                     </StackPanel>
                 </Grid>
             </Grid>
-         
+
             <Grid Grid.Column="1" Margin="5,0,0,0">
                 <StackPanel>
                     <Label>Attribute</Label>
-                    <TextBox Text="{Binding Properties.Attribute}"></TextBox>
+                    <TextBox IsReadOnly="True" Text="{Binding Properties.Attribute}"></TextBox>
                 </StackPanel>
             </Grid>
         </Grid>

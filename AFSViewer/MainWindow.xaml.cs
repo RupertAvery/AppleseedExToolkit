@@ -28,6 +28,7 @@ using Ps2IsoTools.UDF.Files;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 using static System.Net.Mime.MediaTypeNames;
 using System.Collections.Generic;
+using System.Reflection.Emit;
 
 namespace AFSViewer;
 
@@ -43,6 +44,8 @@ public partial class MainWindow : Window
     private string? _projectPath = null;
 
     private ApexProject? _apexProject;
+
+    private TreeNode? _currentNode = null;
 
     public MainWindow()
     {
@@ -121,7 +124,7 @@ public partial class MainWindow : Window
             HideMessage();
 
         }
-       
+
 
     }
 
@@ -473,13 +476,48 @@ public partial class MainWindow : Window
 
     private void ModelOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MainWindowViewModel.BinView))
+        switch (e.PropertyName)
         {
-            UpdateView(_model.SelectedNode);
-        }
-        if (e.PropertyName == nameof(MainWindowViewModel.EditText))
-        {
-            TrySaveApex(_model.SelectedNode);
+            case nameof(MainWindowViewModel.SelectedNode):
+                switch (_model.BinView)
+                {
+                    case "Shift-JIS":
+                        TrySaveText();
+                        break;
+                    case "Item":
+                        TrySaveItem();
+                        break;
+                }
+                break;
+
+            case nameof(MainWindowViewModel.BinView):
+                if (_apexProject != null)
+                {
+                    if (_model.SelectedNode != null)
+                    {
+                        if (_apexProject.Files.TryGetValue(_model.SelectedNode.Path + ".bin", out var apexFile))
+                        {
+                            if (apexFile.Type != null)
+                            {
+                                _model.BinView = apexFile.Type;
+                            }
+                        }
+                    }
+                }
+
+                UpdateView(_model.SelectedNode);
+                break;
+
+            case nameof(MainWindowViewModel.EditText):
+                TrySaveText();
+                break;
+
+            case nameof(MainWindowViewModel.EditItem1):
+            case nameof(MainWindowViewModel.EditItem2):
+            case nameof(MainWindowViewModel.EditItem3):
+            case nameof(MainWindowViewModel.EditItem4):
+                TrySaveItem();
+                break;
         }
     }
 
@@ -488,14 +526,12 @@ public partial class MainWindow : Window
         _source?.Dispose();
     }
 
-    private bool _isLoadingItem = false;
-
-    private void TrySaveApex(TreeNode? node)
+    private void TrySaveText()
     {
-        if (_isLoadingItem) return;
-        if (node == null) return;
+        if (_currentNode == null) return;
+        if (!_model.IsTextDirty) return;
 
-        var nodePath = node.Path + ".bin";
+        var nodePath = _currentNode.Path + ".bin";
 
         if (!_apexProject.Files.TryGetValue(nodePath, out var apexFile))
         {
@@ -510,6 +546,7 @@ public partial class MainWindow : Window
         else
         {
             apexFile.Path = nodePath;
+            apexFile.Type = _model.BinView;
         }
 
 
@@ -538,7 +575,7 @@ public partial class MainWindow : Window
 
             file.Flush();
 
-            UpdateNodeArtifacts([node], apexFile);
+            UpdateNodeArtifacts([_currentNode], apexFile);
         }
         else
         {
@@ -547,11 +584,86 @@ public partial class MainWindow : Window
                 File.Delete(path);
             }
 
-            node.HasArtifact = false;
+            _currentNode.HasArtifact = false;
 
             _apexProject.Files.Remove(nodePath);
         }
 
+        _model.IsTextDirty = false;
+    }
+
+    private void TrySaveItem()
+    {
+        if (_currentNode == null) return;
+        if (!_model.IsItemDirty) return;
+
+        var nodePath = _currentNode.Path + ".bin";
+
+        if (!_apexProject.Files.TryGetValue(nodePath, out var apexFile))
+        {
+            apexFile = new ApexFile()
+            {
+                Path = nodePath,
+                Type = _model.BinView,
+            };
+
+            _apexProject.Files.Add(nodePath, apexFile);
+        }
+        else
+        {
+            apexFile.Path = nodePath;
+            apexFile.Type = _model.BinView;
+        }
+
+
+        var path = Path.Combine(_apexProject.Path, apexFile.Path);
+
+        var dir = Path.GetDirectoryName(path);
+
+        if (!Directory.Exists(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
+        if (_model.EditItem1 != null)
+        {
+            var data = EncodeShiftJIS(_model.EditItem1, 0x20);
+            data.CopyTo(_model.ItemBuffer.AsSpan(0xA0, 0x20));
+        }
+
+        if (_model.EditItem2 != null)
+        {
+            var data = EncodeShiftJIS(_model.EditItem2, 0x30);
+            data.CopyTo(_model.ItemBuffer.AsSpan(0xC0, 0x30));
+        }
+
+        if (_model.EditItem3 != null)
+        {
+            var data = EncodeShiftJIS(_model.EditItem3, 0x20);
+            data.CopyTo(_model.ItemBuffer.AsSpan(0xF0, 0x20));
+        }
+
+        if (_model.EditItem4 != null)
+        {
+            var data = EncodeShiftJIS(_model.EditItem4, 0x10);
+            data.CopyTo(_model.ItemBuffer.AsSpan(0x110, 0x10));
+        }
+
+        using var file = new FileStream(path, FileMode.Create, FileAccess.Write);
+
+        file.Write(_model.ItemBuffer);
+
+        if (file.Length % 0x10 > 0)
+        {
+            var padding = new byte[0x10 - file.Length % 0x10];
+            file.Write(padding);
+        }
+
+        file.Flush();
+
+        UpdateNodeArtifacts([_currentNode], apexFile);
+
+        _model.IsItemDirty = false;
     }
 
     private void OpenArchive()
@@ -609,9 +721,7 @@ public partial class MainWindow : Window
                 nodes.Add(node);
             }
         }
-        else
-
-        if (filename.ToLower().EndsWith(".dar"))
+        else if (filename.ToLower().EndsWith(".dar"))
         {
             var reader = new DARReader(_source);
 
@@ -753,15 +863,23 @@ public partial class MainWindow : Window
 
     private void UpdateView(TreeNode? node)
     {
-        _isLoadingItem = true;
+        _model.IsUpdatingView = true;
 
         _model.Item1 = "";
         _model.Item2 = "";
         _model.Item3 = "";
         _model.Item4 = "";
+
+
         _model.Data = "";
         _model.Image = null;
         _model.EditText = "";
+
+        _model.EditItem1 = "";
+        _model.EditItem2 = "";
+        _model.EditItem3 = "";
+        _model.EditItem4 = "";
+
         _model.Properties.Attribute = "";
 
         _model.ImageVisibility = Visibility.Hidden;
@@ -769,7 +887,20 @@ public partial class MainWindow : Window
 
         if (node == null) return;
 
+        _currentNode = node;
+
         _model.Properties.Attribute = node.Attribute;
+
+        if (_apexProject != null)
+        {
+            if (_apexProject.Files.TryGetValue(node.Path + ".bin", out var apexFile))
+            {
+                if (apexFile.Type != null)
+                {
+                    _model.BinView = apexFile.Type;
+                }
+            }
+        }
 
         switch (node.Type)
         {
@@ -850,6 +981,7 @@ public partial class MainWindow : Window
                                     {
                                         chars.Append($"{(char)b}");
                                     }
+
                                     c++;
                                     if (c == width)
                                     {
@@ -871,23 +1003,69 @@ public partial class MainWindow : Window
 
                         case "Item":
                             {
+                                _model.ItemBuffer = buffer;
+
                                 if (buffer.Length > 0x11F)
                                 {
-
                                     _model.Item1 = DecodeShiftJIS(buffer.AsSpan(0xA0, 0x20));
                                     _model.Item2 = DecodeShiftJIS(buffer.AsSpan(0xC0, 0x30));
                                     _model.Item3 = DecodeShiftJIS(buffer.AsSpan(0xF0, 0x20));
                                     _model.Item4 = DecodeShiftJIS(buffer.AsSpan(0x110, 0x10));
                                 }
 
+                                if (_apexProject != null)
+                                {
+                                    var buffer2 = new byte[node.Size];
+
+                                    if (_apexProject.Files.TryGetValue(node.Path, out var apexFile))
+                                    {
+                                        var path = Path.Combine(_apexProject.Path, apexFile.Path + ".bin");
+
+
+                                        if (File.Exists(path))
+                                        {
+                                            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read);
+                                            fs.Read(buffer2);
+
+                                            if (buffer2.Length > 0x11F)
+                                            {
+                                                _model.EditItem1 = DecodeShiftJIS(buffer2.AsSpan(0xA0, 0x20));
+                                                _model.EditItem2 = DecodeShiftJIS(buffer2.AsSpan(0xC0, 0x30));
+                                                _model.EditItem3 = DecodeShiftJIS(buffer2.AsSpan(0xF0, 0x20));
+                                                _model.EditItem4 = DecodeShiftJIS(buffer2.AsSpan(0x110, 0x10));
+                                            }
+                                        }
+                                    }
+                                    else
+                                    {
+                                        var path = Path.Combine(_apexProject.Path, node.Path + ".bin");
+
+                                        if (File.Exists(path))
+                                        {
+                                            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read);
+                                            fs.Read(buffer2);
+
+                                            if (buffer2.Length > 0x11F)
+                                            {
+                                                _model.EditItem1 = DecodeShiftJIS(buffer2.AsSpan(0xA0, 0x20));
+                                                _model.EditItem2 = DecodeShiftJIS(buffer2.AsSpan(0xC0, 0x30));
+                                                _model.EditItem3 = DecodeShiftJIS(buffer2.AsSpan(0xF0, 0x20));
+                                                _model.EditItem4 = DecodeShiftJIS(buffer2.AsSpan(0x110, 0x10));
+                                            }
+                                        }
+                                    }
+                                }
+
                                 break;
                             }
                     }
+
                     break;
                 }
         }
 
-        _isLoadingItem = false;
+        _model.IsUpdatingView = false;
+
 
     }
 
@@ -919,9 +1097,9 @@ public partial class MainWindow : Window
 
         var pixelFormat = picture.ImageColorType switch
         {
-            1 => PixelFormats.Bgr555,  // Untested
+            1 => PixelFormats.Bgr555, // Untested
             2 => PixelFormats.Rgb24,
-            3 => PixelFormats.Bgra32,  // Untested
+            3 => PixelFormats.Bgra32, // Untested
             4 => PixelFormats.Indexed4,
             5 => PixelFormats.Indexed8
         };
@@ -935,7 +1113,7 @@ public partial class MainWindow : Window
             palette,
             data.PixelData,
             stride
-            );
+        );
 
         return source;
     }
@@ -949,12 +1127,27 @@ public partial class MainWindow : Window
     }
 
 
-    private static Span<byte> EncodeShiftJIS(string text)
+    private static Span<byte> EncodeShiftJIS(string text, int? size = null)
     {
+        text = text.Trim([' ', '\0']);
         text = text.Replace("\r\n", "\\n").Replace("\n", "\\n");
 
         var japaneseEncoding = Encoding.GetEncoding("Shift-JIS");
         var japaneseBytes = japaneseEncoding.GetBytes(text);
+
+        if (size != null)
+        {
+            if (japaneseBytes.Length > size.Value)
+            {
+                japaneseBytes = japaneseBytes[..size.Value];
+            }
+            else if (japaneseBytes.Length < size.Value)
+            {
+                var buffer = new byte[size.Value];
+                japaneseBytes.CopyTo(buffer.AsSpan());
+                return buffer;
+            }
+        }
 
         return japaneseBytes;
     }
@@ -995,6 +1188,7 @@ public partial class MainWindow : Window
                 if (tvi3 != null) return tvi3;
             }
         }
+
         return null;
     }
 
@@ -1067,6 +1261,16 @@ public partial class MainWindow : Window
         CalculateCharData();
     }
 
+    private void TranslatedText_OnPreviewMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        CalculateCharData();
+    }
+
+    private void TranslatedText_OnGotFocus(object sender, RoutedEventArgs e)
+    {
+        CalculateCharData();
+    }
+
     private void CalculateCharData()
     {
         var ci = TranslatedText.CaretIndex;
@@ -1084,8 +1288,46 @@ public partial class MainWindow : Window
         _model.Bytes = (int)Util.Pad((uint)EncodeShiftJIS(TranslatedText.Text).Length, 0x10);
     }
 
-    private void TranslatedText_OnGotFocus(object sender, RoutedEventArgs e)
+
+    private void ItemCopy_OnClick(object sender, RoutedEventArgs e)
     {
-        CalculateCharData();
+        var text = $"{_model.Item1.Trim(['\0'])}\n{_model.Item2.Trim(['\0'])}\n{_model.Item3.Trim(['\0'])}\n{_model.Item4.Trim(['\0'])}";
+        Clipboard.SetDataObject(text);
     }
+
+    private void EditItemCopy_OnClick(object sender, RoutedEventArgs e)
+    {
+        var text = $"{_model.EditItem1}\n{_model.EditItem2}\n{_model.EditItem3}\n{_model.EditItem4}";
+        Clipboard.SetDataObject(text);
+    }
+
+    private void EditItemPaste_OnClick(object sender, RoutedEventArgs e)
+    {
+        IDataObject iData = Clipboard.GetDataObject();
+        if (iData.GetDataPresent(DataFormats.Text))
+        {
+            var text = (string)iData.GetData(DataFormats.Text);
+            var parts = text.Split(["\r\n", "\r", "\n"], StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length > 0)
+            {
+                _model.EditItem1 = parts[0];
+            }
+
+            if (parts.Length > 1)
+            {
+                _model.EditItem2 = parts[1];
+            }
+
+            if (parts.Length > 2)
+            {
+                _model.EditItem3 = parts[2];
+            }
+
+            if (parts.Length > 3)
+            {
+                _model.EditItem4 = parts[3];
+            }
+        }
+    }
+
 }

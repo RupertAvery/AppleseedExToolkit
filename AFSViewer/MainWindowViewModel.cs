@@ -32,10 +32,18 @@ public class MainWindowViewModel : BaseNotify
     private int _character;
     private int _bytes;
     private int _characters;
+    private string? _editItem1;
+    private string? _editItem2;
+    private string? _editItem3;
+    private string? _editItem4;
+    private bool _isTextDirty;
+    private bool _isItemDirty;
+    private string _editTextMode;
 
     public MainWindowViewModel()
     {
-        _binView = "Shift-JIS";
+        //_binView = "Shift-JIS";
+        _binView = "Item";
         _textVisibility = Visibility.Visible;
         _imageVisibility = Visibility.Hidden;
         Properties = new PropertyPaneModel();
@@ -80,7 +88,14 @@ public class MainWindowViewModel : BaseNotify
     public string EditText
     {
         get => _editText;
-        set => SetField(ref _editText, value);
+        set
+        {
+            SetField(ref _editText, value);
+            if (!IsUpdatingView)
+            {
+                IsTextDirty = true;
+            }
+        }
     }
 
     public int Page
@@ -155,6 +170,65 @@ public class MainWindowViewModel : BaseNotify
         set => SetField(ref _item4, value);
     }
 
+    public byte[] ItemBuffer { get; set; }
+
+    public bool IsUpdatingView { get; set; }
+
+    public string? EditItem1
+    {
+        get => _editItem1;
+        set
+        {
+            SetField(ref _editItem1, value);
+            if (!IsUpdatingView)
+            {
+                IsItemDirty = true;
+            }
+        }
+    }
+
+    public string? EditItem2
+    {
+        get => _editItem2;
+        set
+        {
+            SetField(ref _editItem2, value);
+            if (!IsUpdatingView)
+            {
+                IsItemDirty = true;
+            }
+
+        }
+    }
+
+    public string? EditItem3
+    {
+        get => _editItem3;
+        set
+        {
+            SetField(ref _editItem3, value);
+            if (!IsUpdatingView)
+            {
+                IsItemDirty = true;
+            }
+
+        }
+    }
+
+    public string? EditItem4
+    {
+        get => _editItem4;
+        set
+        {
+            SetField(ref _editItem4, value);
+            if (!IsUpdatingView)
+            {
+                IsItemDirty = true;
+            }
+
+        }
+    }
+
     public BitmapSource Image
     {
         get => _image;
@@ -207,5 +281,23 @@ public class MainWindowViewModel : BaseNotify
     {
         get => _characters;
         set => SetField(ref _characters, value);
+    }
+
+    public bool IsTextDirty
+    {
+        get => _isTextDirty;
+        set => SetField(ref _isTextDirty, value);
+    }
+
+    public bool IsItemDirty
+    {
+        get => _isItemDirty;
+        set => SetField(ref _isItemDirty, value);
+    }
+
+    public string EditTextMode
+    {
+        get => _editTextMode;
+        set => SetField(ref _editTextMode, value);
     }
 }
