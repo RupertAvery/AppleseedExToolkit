@@ -29,19 +29,23 @@ public class DARReader
         }
 
         _header.Version = reader.ReadUInt32();
-        _header.PointerCount = reader.ReadUInt32();
-        _header.Padding = reader.ReadUInt32();
-        var Entries = new DAREntry[_header.PointerCount];
+        _header.EntryCount = reader.ReadUInt32();
+        _header.Reserved = reader.ReadUInt32();
+        var Entries = new DAREntry[_header.EntryCount];
 
         long lastOffset = 0;
 
-        for (var i = 0; i < _header.PointerCount; i++)
+        for (var i = 0; i < _header.EntryCount; i++)
         {
             var offset = reader.ReadUInt32();
 
             if (i > 0)
             {
                 Entries[i - 1].Size = (uint)(offset - lastOffset);
+                if (Entries[i - 1].Size == 0)
+                {
+                    var x = 1;
+                }
             }
 
             Entries[i] = new DAREntry()
@@ -53,11 +57,43 @@ public class DARReader
             lastOffset = offset;
         }
 
-        if (_header.PointerCount > 0)
-        {
-            Entries[_header.PointerCount - 1].Size = (uint)(size - lastOffset);
 
-            for (var i = 0; i < _header.PointerCount; i++)
+        var position = _stream.Position;
+
+        if (position % 0x10 > 0)
+        {
+            _stream.Seek(0x10 - (position % 0x10), SeekOrigin.Current);
+        }
+
+
+        if (_header.EntryCount > 0)
+        {
+            for (var i = 0; i < _header.EntryCount; i++)
+            {
+                Entries[i].Attribute = reader.ReadByte();
+            }
+        }
+
+
+        position = _stream.Position;
+
+        if (position % 0x10 > 0)
+        {
+            _stream.Seek(0x10 - (position % 0x10), SeekOrigin.Current);
+        }
+
+
+
+        if (_header.EntryCount > 0)
+        {
+            //if (size == 0)
+            //{
+            //    var x = 1;
+            //}
+
+            Entries[_header.EntryCount - 1].Size = Math.Max(0, (uint)(size - lastOffset));
+
+            for (var i = 0; i < _header.EntryCount; i++)
             {
                 Entries[i].Type = "bin";
 

@@ -7,7 +7,7 @@ namespace AFSViewer;
 
 public class MainWindowViewModel : BaseNotify
 {
-    private IEnumerable<TreeNode> _nodes;
+    private IEnumerable<TreeNode>? _nodes;
     private string _data;
     private string _binView;
     private TreeNode? _selectedNode;
@@ -24,12 +24,20 @@ public class MainWindowViewModel : BaseNotify
     private ICommand _extractNodeCommand;
     private bool _isLoaded;
     private bool _isNodeSelected;
+    private bool _hasProject;
+    private bool _isProjectDirty;
+    private PropertyPaneModel _properties;
+    private int _page;
+    private int _line;
+    private int _character;
+    private int _bytes;
 
     public MainWindowViewModel()
     {
         _binView = "Shift-JIS";
         _textVisibility = Visibility.Visible;
         _imageVisibility = Visibility.Hidden;
+        Properties = new PropertyPaneModel();
     }
 
     public bool IsLoaded
@@ -56,7 +64,7 @@ public class MainWindowViewModel : BaseNotify
         }
     }
 
-    public IEnumerable<TreeNode> Nodes
+    public IEnumerable<TreeNode>? Nodes
     {
         get => _nodes;
         set => SetField(ref _nodes, value);
@@ -74,11 +82,47 @@ public class MainWindowViewModel : BaseNotify
         set => SetField(ref _editText, value);
     }
 
+    public int Page
+    {
+        get => _page;
+        set => SetField(ref _page, value);
+    }
+
+    public int Line
+    {
+        get => _line;
+        set => SetField(ref _line, value);
+    }
+
+    public int Character
+    {
+        get => _character;
+        set => SetField(ref _character, value);
+    }
+
+    public int Bytes
+    {
+        get => _bytes;
+        set => SetField(ref _bytes, value);
+    }
+
     public ICommand OpenArchiveCommand
     {
         get => _openArchiveCommand;
         set => SetField(ref _openArchiveCommand, value);
     }
+
+    public ICommand NewProjectCommand { get; set; }
+
+    public ICommand LoadProjectCommand { get; set; }
+
+    public ICommand SaveProjectCommand { get; set; }
+
+    public ICommand SaveProjectAsCommand { get; set; }
+
+    public ICommand EditProjectCommand { get; set; }
+
+    public ICommand BuildProjectCommand { get; set; }
 
     public string BinView
     {
@@ -138,5 +182,23 @@ public class MainWindowViewModel : BaseNotify
     {
         get => _extractNodeCommand;
         set => SetField(ref _extractNodeCommand, value);
+    }
+
+    public bool HasProject
+    {
+        get => _hasProject;
+        set => SetField(ref _hasProject, value);
+    }
+
+    public bool IsProjectDirty
+    {
+        get => _isProjectDirty;
+        set => SetField(ref _isProjectDirty, value);
+    }
+
+    public PropertyPaneModel Properties
+    {
+        get => _properties;
+        set => SetField(ref _properties, value);
     }
 }

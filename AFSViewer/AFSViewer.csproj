@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\AFSTools\AFSTools.csproj" />
     <ProjectReference Include="..\FileFormats\FileFormats.csproj" />
+    <ProjectReference Include="..\Ps2IsoTools\Ps2IsoTools.csproj" />
   </ItemGroup>
 
 </Project>

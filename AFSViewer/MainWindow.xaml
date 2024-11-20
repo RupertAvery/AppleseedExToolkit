@@ -12,6 +12,7 @@
         <ResourceDictionary>
             <local:VisibilityConverter x:Key="VisibilityConverter"></local:VisibilityConverter>
             <local:CheckedConverter x:Key="CheckedConverter"></local:CheckedConverter>
+            <local:FontWeightConverter x:Key="FontWeightConverter"></local:FontWeightConverter>
         </ResourceDictionary>
     </Window.Resources>
     <Grid Margin="3">
@@ -27,6 +28,15 @@
         <Menu Grid.ColumnSpan="2" Grid.Row="0">
             <MenuItem Header="_File">
                 <MenuItem Header="_Open Archive" Command="{Binding OpenArchiveCommand}"></MenuItem>
+                <Separator/>
+                <MenuItem Header="_New Project" Command="{Binding NewProjectCommand}"></MenuItem>
+                <MenuItem Header="_Load Project" Command="{Binding LoadProjectCommand}"></MenuItem>
+                <MenuItem IsEnabled="{Binding HasProject}" Header="_Save Project" Command="{Binding SaveProjectCommand}"></MenuItem>
+                <MenuItem IsEnabled="{Binding HasProject}" Header="Save Project _As" Command="{Binding SaveProjectAsCommand}"></MenuItem>
+            </MenuItem>
+            <MenuItem Header="_Project">
+                <MenuItem IsEnabled="{Binding HasProject}" Header="_Edit" Command="{Binding EditProjectCommand}"></MenuItem>
+                <MenuItem IsEnabled="{Binding HasProject}" Header="_Build" Command="{Binding BuildProjectCommand}"></MenuItem>
             </MenuItem>
             <MenuItem Header="_View">
                 <MenuItem IsChecked="{Binding BinView, Converter={StaticResource CheckedConverter}, ConverterParameter=Hexadecimal}" Header="Hexadecimal" Command="{Binding SetDataViewCommand}" CommandParameter="Hexadecimal"></MenuItem>
@@ -36,11 +46,13 @@
         </Menu>
 
         <TreeView 
+            x:Name="ArcTreeView"
             AllowDrop="True"
             Drop="UIElement_OnDrop"
             IsTextSearchEnabled="True"  
             Grid.Column="0" Grid.Row="1" 
             ItemsSource="{Binding Nodes}" 
+            KeyDown="UIElement_OnKeyDown"
             TreeViewItem.Expanded="TreeViewItem_Expanded" 
             SelectedItemChanged="TreeView_OnSelectedItemChanged">
             <TreeView.ItemContainerStyle>
@@ -50,7 +62,7 @@
             </TreeView.ItemContainerStyle>
             <TreeView.ItemTemplate>
                 <HierarchicalDataTemplate DataType="{x:Type local:TreeNode}" ItemsSource="{Binding Children}">
-                    <TextBlock Text="{Binding Name}" />
+                    <TextBlock FontWeight="{Binding HasArtifact, Converter={StaticResource FontWeightConverter} }" Text="{Binding Name}" />
                 </HierarchicalDataTemplate>
             </TreeView.ItemTemplate>
             <TreeView.ContextMenu>
@@ -65,19 +77,21 @@
                       Width="5" Grid.Column="1" Grid.Row="1"></GridSplitter>
 
         <Grid Grid.Column="2" Grid.Row="1" >
-            <Grid Visibility="{Binding ImageVisibility}" Background="Black">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition Width="200"/>
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0" Visibility="{Binding ImageVisibility}" Background="Black">
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
                     <Image Stretch="None" Source="{Binding Image}"></Image>
                 </ScrollViewer>
             </Grid>
-            <Grid Visibility="{Binding TextVisibility}">
-                <Grid.RowDefinitions>
-                    <RowDefinition MinHeight="50"/>
-                    <RowDefinition Height="5"/>
-                    <RowDefinition MinHeight="50"/>
-                </Grid.RowDefinitions>
 
-                <Grid Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Item}" >
+            <Grid Grid.Column="0" Visibility="{Binding TextVisibility}">
+                <TextBox Grid.Column="0" Padding="15" Foreground="#55A" Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Hexadecimal}" FontFamily="Consolas" IsReadOnly="True" Text="{Binding Data}" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" FontSize="20"></TextBox>
+
+                <Grid Grid.Column="0" Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Item}" >
                     <ScrollViewer>
                         <StackPanel>
                             <Label>Item Text 1</Label>
@@ -92,15 +106,49 @@
                     </ScrollViewer>
                 </Grid>
 
-                <TextBox Grid.Row="0" Padding="15" Background="Black" Foreground="White" Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Shift-JIS}" IsReadOnly="True" Text="{Binding Data}" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" FontSize="20"></TextBox>
-                <TextBox Grid.Row="0" Padding="15" Foreground="#55A" Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Hexadecimal}" FontFamily="Consolas" IsReadOnly="True" Text="{Binding Data}" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" FontSize="20"></TextBox>
+                <Grid Grid.Column="0" Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Shift-JIS}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition MinHeight="50"/>
+                        <RowDefinition Height="5"/>
+                        <RowDefinition MinHeight="50"/>
+                        <RowDefinition Height="30"/>
+                    </Grid.RowDefinitions>
 
-                <GridSplitter HorizontalAlignment="Stretch"
-                              VerticalAlignment="Center"  
-                              Height="5" Grid.Column="0" Grid.Row="1"></GridSplitter>
 
-                <TextBox Padding="15"  Background="Black" Foreground="White" IsEnabled="{Binding IsNodeSelected}" TextWrapping="Wrap" AcceptsReturn="True" Grid.Row="2" Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Shift-JIS}" Text="{Binding EditText}"  HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" FontSize="20"></TextBox>
+                    <TextBox Grid.Row="0" Padding="15" Background="Black" Foreground="White"  IsReadOnly="True" Text="{Binding Data}" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" FontSize="20"></TextBox>
 
+                    <GridSplitter HorizontalAlignment="Stretch"
+                     VerticalAlignment="Center"  
+                     Height="5" Grid.Column="0" Grid.Row="1"></GridSplitter>
+
+                    <TextBox x:Name="TranslatedText" 
+                             KeyUp="TranslatedText_OnKeyUp"
+                             GotFocus="TranslatedText_OnGotFocus"
+                             Padding="15"  Background="Black" Foreground="White" IsEnabled="{Binding IsNodeSelected}" TextWrapping="NoWrap" AcceptsReturn="True" Grid.Row="2" Visibility="{Binding BinView, Converter={StaticResource VisibilityConverter}, ConverterParameter=Shift-JIS}" Text="{Binding EditText}"  
+                             HorizontalScrollBarVisibility="Auto" 
+                             VerticalScrollBarVisibility="Auto" 
+                             FontSize="20"></TextBox>
+                    <Rectangle Grid.Row="2" Stroke="Red" Margin="15" Width="315" HorizontalAlignment="Left"></Rectangle>
+                    <Rectangle Grid.Row="2" Stroke="Blue" Margin="14" Width="505" Height="100" VerticalAlignment="Top" HorizontalAlignment="Left"></Rectangle>
+
+                    <StackPanel Orientation="Horizontal" Grid.Row="3">
+                        <Label>Page:</Label>
+                        <Label Content="{Binding Page}"></Label>
+                        <Label>Line:</Label>
+                        <Label Content="{Binding Line}"></Label>
+                        <Label>Character:</Label>
+                        <Label Content="{Binding Character}"></Label>
+                        <Label>Bytes:</Label>
+                        <Label Content="{Binding Bytes}"></Label>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+         
+            <Grid Grid.Column="1" Margin="5,0,0,0">
+                <StackPanel>
+                    <Label>Attribute</Label>
+                    <TextBox Text="{Binding Properties.Attribute}"></TextBox>
+                </StackPanel>
             </Grid>
         </Grid>
 

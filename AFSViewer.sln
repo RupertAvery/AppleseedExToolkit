@@ -9,7 +9,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FileFormats", "FileFormats\
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TestApp", "TestApp\TestApp.csproj", "{BADE79D9-B1FD-4450-99AF-63F3F20E24C3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AFSTools", "AFSTools\AFSTools.csproj", "{A8D02913-6399-43B6-B51E-07FD1A18AE89}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AFSTools", "AFSTools\AFSTools.csproj", "{A8D02913-6399-43B6-B51E-07FD1A18AE89}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Ps2IsoTools", "Ps2IsoTools\Ps2IsoTools.csproj", "{51C2BC85-43BF-478A-9A91-A81C18B3EE4B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,6 +35,10 @@ Global
 		{A8D02913-6399-43B6-B51E-07FD1A18AE89}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A8D02913-6399-43B6-B51E-07FD1A18AE89}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A8D02913-6399-43B6-B51E-07FD1A18AE89}.Release|Any CPU.Build.0 = Release|Any CPU
+		{51C2BC85-43BF-478A-9A91-A81C18B3EE4B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{51C2BC85-43BF-478A-9A91-A81C18B3EE4B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{51C2BC85-43BF-478A-9A91-A81C18B3EE4B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{51C2BC85-43BF-478A-9A91-A81C18B3EE4B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

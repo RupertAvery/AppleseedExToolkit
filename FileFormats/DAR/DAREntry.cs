@@ -6,4 +6,5 @@ public class DAREntry
     public uint Size { get; set; }
     public long StreamOffset { get; set; }
     public string Type { get; set; }
+    public byte Attribute { get; set; }
 }

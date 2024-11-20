@@ -54,6 +54,14 @@ public class AFSArchive : IDisposable
             };
         }
 
+        //for (var i = 0; i < _header.PointerCount; i++)
+        //{
+        //    if (i > 0)
+        //    {
+        //        Entries[i -1].Padding = Entries[i].Offset - (Entries[i - 1].Offset + Entries[i - 1].Size);
+        //    }
+        //}
+
         uint attributeDataOffset = reader.ReadUInt32();
         uint attributeDataSize = reader.ReadUInt32();
 

@@ -1,78 +1,146 @@
 ﻿using FileFormats.AFS;
 using FileFormats.DAR;
-using System;
-using System.Formats.Tar;
-using System.IO;
-using System.Reflection.PortableExecutable;
+using System.Text;
 
 namespace AFSTools;
 
-public class AFSBuilder
+public class AFSPatcher
 {
+    private static byte[] AFSHeader = [0x41, 0x46, 0x53, 0x00];
+    private const int AFS_ENTRY_PADDING = 0x800;
 
-    public void Build(ApexProject project, Stream afsStream, AFSArchive archive, Stream outStream)
+    public void Build(AFSArchive archive, Stream outStream, string patchPath, HashSet<string> ignoredFiles)
     {
         var entries = archive.Entries;
 
         var writer = new BinaryWriter(outStream);
 
-        writer.Write((byte[])[44, 44, 44, 44]);
-        writer.Write((UInt16)entries.Length);
+        writer.Write(AFSHeader);
+        writer.Write((UInt32)entries.Length);
 
-        UpdateEntries(project, entries, afsStream);
+        var offset = entries[0].Offset;
 
-        for (var i = 0; i < entries.Length; i++)
-        {
-            writer.Write((UInt32)entries[i].Offset);
-            writer.Write((UInt32)entries[i].Size);
-        }
-
-        //uint attributeDataOffset = reader.ReadUInt32();
-        //uint attributeDataSize = reader.ReadUInt32();
-
-        //foreach (var entry in Entries)
-        //{
-
-        //}
-    }
-
-    private void UpdateEntries(ApexProject project, AFSEntry[] entries, Stream afsStream)
-    {
-        for (var i = 0; i < entries.Length; i++)
-        {
-            var entry = entries[i];
-        }
-
-
+        var offsets = new uint[entries.Length];
+        var sizes = new uint[entries.Length];
 
         for (var i = 0; i < entries.Length; i++)
         {
             var entry = entries[i];
+            
+            var name = Path.GetFileNameWithoutExtension(entry.Name);
 
-            // Check if a folder exists in the project files
-            if (entry.Name.EndsWith(".dar"))
+            if (entry.Name.EndsWith(".dar") && !ignoredFiles.Contains(name))
             {
-                GetDarEntry(entry.Offset, entry.Size, afsStream, "", "", null);
+                offsets[i] = offset;
+                var size = ComputeDarSize(entry.Offset, entry.Size, archive.Stream, name, Path.Combine(patchPath, name), ignoredFiles);
+                sizes[i] = size;
+                offset += size;
+                offset = Util.Pad(offset, AFS_ENTRY_PADDING);
             }
             else
             {
-                afsStream.Seek(entry.Offset, SeekOrigin.Begin);
+                offsets[i] = offset;
+                sizes[i] = entry.Size;
+                offset += entry.Size;
+                offset = Util.Pad(offset, AFS_ENTRY_PADDING);
+            }
+        }
+
+        //UpdateEntries(project, entries, afsStream);
+
+        for (var i = 0; i < entries.Length; i++)
+        {
+            writer.Write((UInt32)offsets[i]);
+            writer.Write((UInt32)sizes[i]);
+        }
+
+        offset = Util.Pad(offset, AFS_ENTRY_PADDING);
+
+        var attributeOffset = offset;
+        var attributeSize = entries.Length * 0x30;
+
+        writer.Write(attributeOffset);
+        writer.Write(attributeSize);
+
+        outStream.Seek(entries[0].Offset, SeekOrigin.Begin);
+
+        for (var i = 0; i < entries.Length; i++)
+        {
+            var entry = entries[i];
+
+            outStream.Seek(offsets[i], SeekOrigin.Begin);
+
+            var name = Path.GetFileNameWithoutExtension(entry.Name);
+
+            // Check if a folder exists in the project files
+            if (entry.Name.EndsWith(".dar") && !ignoredFiles.Contains(name))
+            {
+                // Check if patched. If true, update the last updated date
+
+                var stream = GetDarEntry(entry.Offset, entry.Size, archive.Stream, name, Path.Combine(patchPath, name), ignoredFiles, true);
+                
+                stream.Seek(0, SeekOrigin.Begin);
+
+                stream.CopyTo(outStream);
+            }
+            else
+
+            {
+                archive.Stream.Seek(entry.Offset, SeekOrigin.Begin);
                 var buffer = new byte[entry.Size];
-                afsStream.Read(buffer);
+                archive.Stream.Read(buffer);
+                writer.Write(buffer);
             }
 
             //entries[i].Offset;
             //entries[i].Size;
         }
 
+        offset = (UInt32)outStream.Position;
+
+        if (offset % 0x1000 > 0)
+        {
+            var padding = 0x1000 - offset % 0x1000;
+            var buffer = new byte[padding];
+            writer.Write(buffer);
+            offset += padding;
+        }
+
+        offset = (UInt32)outStream.Position;
+
+        for (var i = 0; i < entries.Length; i++)
+        {
+            var buffer = new byte[0x20];
+            var entry = entries[i];
+            Encoding.ASCII.GetBytes(entry.Name, 0, entry.Name.Length, buffer, 0);
+            writer.Write(buffer);
+            writer.Write((UInt16)entry.LastModifiedDate.Year);
+            writer.Write((UInt16)entry.LastModifiedDate.Month);
+            writer.Write((UInt16)entry.LastModifiedDate.Day);
+            writer.Write((UInt16)entry.LastModifiedDate.Hour);
+            writer.Write((UInt16)entry.LastModifiedDate.Minute);
+            writer.Write((UInt16)entry.LastModifiedDate.Second);
+            writer.Write(entry.CustomData);
+        }
+
+        offset = (UInt32)outStream.Position;
+
+        if (offset % 0x800 > 0)
+        {
+            var padding = 0x800 - offset % 0x800;
+            var buffer = new byte[padding];
+            writer.Write(buffer);
+            offset += padding;
+        }
     }
 
-    public uint ComputeDarSize(long offset, long size, Stream stream, string name, string patchPath)
+
+    public uint ComputeDarSize(long offset, long size, Stream stream, string name, string patchPath, HashSet<string> ignoredFiles)
     {
         stream.Seek(offset, SeekOrigin.Begin);
 
         var reader = new DARReader(stream);
-        
+
         var entries = reader.GetEntries(offset, size);
 
         var headerSize = 0x10;
@@ -108,14 +176,14 @@ public class AFSBuilder
             {
                 var darEntry = entries[i];
 
-                if (darEntry.Type == "dar" && filename != "hw_73_12" && filename != "hw_73_13" && filename != "hw_73_1" && filename != "hw_73_2")
+                if (darEntry.Type == "dar" && !ignoredFiles.Contains(filename))
                 {
                     //if (filename == "hw_73" || filename == "hw_74" || filename == "hw_73_30")
                     //{
                     //    var x = 1;
                     //}
 
-                    var len = ComputeDarSize(darEntry.StreamOffset + darEntry.Offset, darEntry.Size, stream, filename, Path.Combine(patchPath, filename));
+                    var len = ComputeDarSize(darEntry.StreamOffset + darEntry.Offset, darEntry.Size, stream, filename, Path.Combine(patchPath, filename), ignoredFiles);
 
                     entrySizes[i] = (uint)len;
                 }
@@ -136,17 +204,19 @@ public class AFSBuilder
             darSize += entrySizes[i];
         }
 
-        var outPadding = darSize % 0x10;
+        //var outPadding = darSize % 0x10;
 
-        if (outPadding > 0)
-        {
-            darSize += 0x10 - outPadding;
-        }
+        //if (outPadding > 0)
+        //{
+        //    darSize += 0x10 - outPadding;
+        //}
+
+        darSize = Util.Pad(darSize, 0x10);
 
         return darSize;
     }
 
-    public Stream GetDarEntry(long offset, long size, Stream stream, string name, string patchPath, HashSet<string> ignoredFiles)
+    public Stream GetDarEntry(long offset, long size, Stream stream, string name, string patchPath, HashSet<string> ignoredFiles, bool topLevel)
     {
         // get the original DAR to enumerate the entries
         stream.Seek(offset, SeekOrigin.Begin);
@@ -214,7 +284,7 @@ public class AFSBuilder
                     //    var x = 1;
                     //}
 
-                    var darSize = ComputeDarSize(darEntry.StreamOffset + darEntry.Offset, darEntry.Size, stream, filename, Path.Combine(patchPath, filename));
+                    var darSize = ComputeDarSize(darEntry.StreamOffset + darEntry.Offset, darEntry.Size, stream, filename, Path.Combine(patchPath, filename), ignoredFiles);
 
                     baseOffset += darSize;
                 }
@@ -234,7 +304,7 @@ public class AFSBuilder
         writer.Write(DARHeader.MAGIC);
         writer.Write((uint)1);
         writer.Write((uint)entries.Length);
-        writer.Write((uint)0);
+        writer.Write((uint)(topLevel ? 1 :0));
 
         // Write Offsets
         for (var i = 0; i < entries.Length; i++)
@@ -244,7 +314,12 @@ public class AFSBuilder
 
         var padding = initialOffset - outputStream.Position;
 
-        writer.Write(new byte[padding]);
+        stream.Seek(offset + outputStream.Position, SeekOrigin.Begin);
+        var buffer3 = new byte[padding];
+        stream.Read(buffer3);
+        writer.Write(buffer3);
+
+        //writer.Write(new byte[padding]);
 
         // Write Dummy???
         //var dummy = new byte[0x10];
@@ -273,7 +348,7 @@ public class AFSBuilder
             {
                 if (darEntry.Type == "dar" && !ignoredFiles.Contains(filename))
                 {
-                    using var rstream = GetDarEntry(darEntry.StreamOffset + darEntry.Offset, darEntry.Size, stream, filename, Path.Combine(patchPath, filename), ignoredFiles);
+                    using var rstream = GetDarEntry(darEntry.StreamOffset + darEntry.Offset, darEntry.Size, stream, filename, Path.Combine(patchPath, filename), ignoredFiles, false);
 
                     rstream.Position = 0;
 

@@ -21,6 +21,13 @@ using FileFormats.TIM2;
 using Microsoft.Win32;
 using Color = System.Windows.Media.Color;
 using Path = System.IO.Path;
+using System.Text.Json;
+using System.Reflection;
+using Ps2IsoTools.UDF;
+using Ps2IsoTools.UDF.Files;
+using static System.Runtime.InteropServices.JavaScript.JSType;
+using static System.Net.Mime.MediaTypeNames;
+using System.Collections.Generic;
 
 namespace AFSViewer;
 
@@ -32,6 +39,8 @@ public partial class MainWindow : Window
     private readonly MainWindowViewModel _model;
 
     private Stream? _source = null;
+    private string? _archivePath = null;
+    private string? _projectPath = null;
 
     private ApexProject? _apexProject;
 
@@ -39,23 +48,347 @@ public partial class MainWindow : Window
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-
         _model = new MainWindowViewModel();
         InitializeComponent();
         DataContext = _model;
 
-        _model.OpenArchiveCommand = new AsyncCommand<object>((o) => OpenArchive());
+        _model.OpenArchiveCommand = new RelayCommand<object>((o) => OpenArchive());
         _model.SetDataViewCommand = new RelayCommand<string>(SetDataView);
         _model.ExtractNodeCommand = new RelayCommand<object>((o) => ExtractNode());
 
-        Closing += OnClosing;
-        //var filename = @"D:\roms\ps2\ARC.AFS";
-        //LoadArchive(filename);
+        _model.NewProjectCommand = new RelayCommand<object>((o) => CreateProject());
+        _model.LoadProjectCommand = new RelayCommand<object>((o) => LoadProject());
+        _model.SaveProjectCommand = new RelayCommand<object>((o) => SaveProject());
+        _model.SaveProjectAsCommand = new RelayCommand<object>((o) => SaveProjectAs());
+        _model.EditProjectCommand = new RelayCommand<object>((o) => EditProject());
+        _model.BuildProjectCommand = new RelayCommand<object>((o) => BuildProject());
 
-        _apexProject = new ApexProject();
-        _apexProject.Path = "D:\\roms\\ps2\\Appleseed EX\\Project";
+        Closing += OnClosing;
 
         _model.PropertyChanged += ModelOnPropertyChanged;
+
+
+        var menuDropAlignmentField = typeof(SystemParameters).GetField("_menuDropAlignment", BindingFlags.NonPublic | BindingFlags.Static);
+        Action setAlignmentValue = () =>
+        {
+            if (SystemParameters.MenuDropAlignment && menuDropAlignmentField != null) menuDropAlignmentField.SetValue(null, false);
+        };
+        setAlignmentValue();
+        SystemParameters.StaticPropertyChanged += (sender, e) => { setAlignmentValue(); };
+
+        // LoadProject("D:\\roms\\ps2\\Appleseed EX\\Project\\project.json");
+    }
+
+    private async void CreateProject()
+    {
+        try
+        {
+            var window = new ProjectWindow();
+            window.Owner = this;
+            window.Title = "New Project";
+            window.ShowDialog();
+
+            if (window.DialogResult.GetValueOrDefault())
+            {
+                var archivePath = Path.Combine(window.Model.ProjectPath, "ARC.AFS");
+                _projectPath = Path.Combine(window.Model.ProjectPath, "project.apex");
+
+                _apexProject = new ApexProject
+                {
+                    ArchivePath = archivePath,
+                    SourceISO = window.Model.ISOPath,
+                    TargetISO = window.Model.PatchedISOPath,
+                    Path = window.Model.ProjectPath
+                };
+
+                SaveProject();
+
+                ShowMessage("Extracting ARC.AFS...");
+
+                await Task.Delay(2000);
+
+                ExtractAFS(_apexProject.SourceISO, _apexProject.ArchivePath);
+
+                ShowMessage("Loading ARC.AFS...");
+
+                await Task.Run(() => LoadArchive(archivePath));
+
+            }
+
+        }
+        finally
+        {
+            HideMessage();
+
+        }
+       
+
+    }
+
+    private async void BuildProject()
+    {
+        try
+        {
+            var archive = new AFSArchive(_apexProject.ArchivePath);
+
+            archive.Open();
+
+            // These DARs seem to have malformed data
+            // Setting them as ignored will copy them over
+            // as-is from the source AFS file
+            var ignoredFiles = new HashSet<string>()
+            {
+                "gw",
+                "hw_73_12",
+                "hw_73_13",
+                "hw_73_1",
+                "hw_73_2"
+            };
+
+            ShowMessage("Patching AFS...");
+
+            var patchedAFSPath = Path.Combine(_apexProject.Path, "Patched_ARC.AFS");
+
+            var builder = new AFSPatcher();
+
+            using (var outstream = new FileStream(patchedAFSPath, FileMode.Create, FileAccess.Write))
+            {
+                builder.Build(archive, outstream, _apexProject.Path, ignoredFiles);
+                outstream.Flush();
+            }
+
+            await Task.Delay(2000);
+
+            ShowMessage("Writing ISO...");
+
+            await Task.Run(() => BuildISO());
+        }
+        finally
+        {
+            HideMessage();
+        }
+    }
+
+
+    private ProcessWindow? processWindow;
+
+    private void ShowMessage(string message)
+    {
+        processWindow ??= new ProcessWindow();
+        processWindow.Owner = this;
+        processWindow.Show();
+        processWindow.SetMessage(message);
+    }
+
+    private void HideMessage()
+    {
+        processWindow?.Hide();
+    }
+
+    void BuildISO()
+    {
+        using (var editor = new UdfEditor(_apexProject.SourceISO))
+        {
+            var fileId = editor.GetFileByName("ARC.AFS");
+
+            editor.RemoveFile(fileId);
+
+            var patchedAFSPath = Path.Combine(_apexProject.Path, "Patched_ARC.AFS");
+
+            using (var fs = File.Open(patchedAFSPath, FileMode.Open))
+            {
+                editor.AddFile("ARC.AFS", fs);
+                editor.Rebuild(_apexProject.TargetISO);
+            }
+        }
+    }
+
+    private void EditProject()
+    {
+        var window = new ProjectWindow();
+        window.Owner = this;
+        window.Model.ProjectPath = _apexProject.Path;
+        window.Model.ISOPath = _apexProject.SourceISO;
+        window.Model.PatchedISOPath = _apexProject.TargetISO;
+
+        window.Title = "Edit Project";
+        window.ShowDialog();
+
+        if (window.DialogResult.GetValueOrDefault())
+        {
+            var archivePath = Path.Combine(window.Model.ProjectPath, "ARC.AFS");
+            _projectPath = Path.Combine(window.Model.ProjectPath, "project.apex");
+
+            _apexProject = new ApexProject
+            {
+                ArchivePath = _archivePath,
+                SourceISO = window.Model.ISOPath,
+                TargetISO = window.Model.PatchedISOPath,
+                Path = window.Model.ProjectPath
+            };
+
+            SaveProject();
+
+            if (!File.Exists(_apexProject.ArchivePath))
+            {
+                ExtractAFS(_apexProject.SourceISO, _apexProject.ArchivePath);
+            }
+        }
+
+    }
+
+    private void ExtractAFS(string srcIso, string outputPath)
+    {
+
+        using var reader = new UdfReader(srcIso);
+
+        FileIdentifier? fileId = reader.GetFileByName("ARC.AFS");
+
+        if (fileId is not null)
+        {
+            using var arcStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
+
+            using var fstream = reader.GetFileStream(fileId);
+
+            fstream.CopyTo(arcStream);
+
+            arcStream.Flush();
+        }
+    }
+
+    private void LoadProject()
+    {
+        var openFileDialog = new OpenFileDialog();
+
+        openFileDialog.Filter = "Project files|*.apex";
+
+        var result = openFileDialog.ShowDialog();
+
+        if (result.HasValue && result.Value)
+        {
+            LoadProjectFile(openFileDialog.FileName);
+        }
+    }
+
+    private void LoadProjectFile(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read);
+
+        _projectPath = path;
+
+        _apexProject = JsonSerializer.Deserialize<ApexProject>(stream);
+
+        LoadArchive(_apexProject.ArchivePath);
+
+        ScanProjectPath();
+
+        _model.HasProject = true;
+    }
+
+    private void ScanProjectPath()
+    {
+        var files = Directory.EnumerateFiles(_apexProject.Path, "*.*", SearchOption.AllDirectories);
+
+        foreach (var file in files)
+        {
+            var temp = _apexProject.Path;
+
+            if (!temp.EndsWith("\\"))
+            {
+                temp = temp + "\\";
+            }
+
+            var path = file.Replace(temp, "");
+
+            if (!_apexProject.Files.TryGetValue(path, out var apexFile))
+            {
+                apexFile = new ApexFile()
+                {
+                    Path = path
+                };
+
+                _apexProject.Files.Add(path, apexFile);
+            }
+
+            UpdateNodeArtifacts(_model.Nodes, apexFile);
+        }
+    }
+
+    private void UpdateNodeArtifacts(IEnumerable<TreeNode> nodes)
+    {
+        if (_apexProject == null) return;
+        foreach (var apexFile in _apexProject.Files.Values)
+        {
+            UpdateNodeArtifacts(nodes, apexFile);
+        }
+    }
+
+    private void UpdateNodeArtifacts(IEnumerable<TreeNode> nodes, ApexFile apexFile)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Path != null)
+            {
+                //if (node.Path.Contains("_30") && apexFile.Path.Contains("_30"))
+                //{
+                //    var x = 1;
+                //}
+
+                string nodePath = node.Path;
+
+                if (node.Type == "dar")
+                {
+                    nodePath = node.Path + "\\";
+                }
+                else
+                {
+                    nodePath = node.Path + $".{node.Type}";
+                }
+
+                var hasArtifiact = apexFile.Path.StartsWith(nodePath);
+
+                if (hasArtifiact)
+                {
+                    var temp = node;
+                    do
+                    {
+                        temp.HasArtifact = hasArtifiact;
+                        temp = temp.Parent;
+                    } while (temp != null);
+                }
+
+
+                if (node.Children != null)
+                {
+                    UpdateNodeArtifacts(node.Children, apexFile);
+                }
+            }
+        }
+    }
+
+    private void SaveProject()
+    {
+        using var stream = new FileStream(_projectPath, FileMode.Create, FileAccess.Write);
+
+        JsonSerializer.Serialize(stream, _apexProject, new JsonSerializerOptions() { WriteIndented = true });
+
+        stream.Flush();
+    }
+
+    private void SaveProjectAs()
+    {
+        var saveFileDialog = new SaveFileDialog();
+
+        saveFileDialog.Filter = "Project files|*.apex";
+
+        var result = saveFileDialog.ShowDialog();
+
+        if (result.HasValue && result.Value)
+        {
+            _projectPath = saveFileDialog.FileName;
+
+            SaveProject();
+        }
     }
 
     private void ExtractNode()
@@ -104,9 +437,6 @@ public partial class MainWindow : Window
                 if (_model.SelectedNode.Type == "dar")
                 {
                     filter = "DAR files|*.dar|";
-                }
-                else
-                {
                 }
 
                 saveFileDialog.FileName = _model.SelectedNode.Name;
@@ -165,19 +495,25 @@ public partial class MainWindow : Window
         if (_isLoadingItem) return;
         if (node == null) return;
 
-        if (!_apexProject.Files.TryGetValue(node.Path, out var apexFile))
+        var nodePath = node.Path + ".bin";
+
+        if (!_apexProject.Files.TryGetValue(nodePath, out var apexFile))
         {
             apexFile = new ApexFile()
             {
-                Path = node.Path,
+                Path = nodePath,
                 Type = _model.BinView,
             };
 
-            _apexProject.Files.Add(node.Path, apexFile);
+            _apexProject.Files.Add(nodePath, apexFile);
+        }
+        else
+        {
+            apexFile.Path = nodePath;
         }
 
 
-        var path = Path.Combine(_apexProject.Path, apexFile.Path + ".txt");
+        var path = Path.Combine(_apexProject.Path, apexFile.Path);
 
         var dir = Path.GetDirectoryName(path);
 
@@ -186,33 +522,56 @@ public partial class MainWindow : Window
             Directory.CreateDirectory(dir);
         }
 
-        using var file = new FileStream(path, FileMode.Create, FileAccess.Write);
+        if (_model.EditText.Trim([' ', '\0']).Length > 0)
+        {
+            var data = EncodeShiftJIS(_model.EditText);
 
-        var writer = new StreamWriter(file, Encoding.UTF8);
+            using var file = new FileStream(path, FileMode.Create, FileAccess.Write);
 
-        writer.Write(_model.EditText);
+            file.Write(data);
 
-        writer.Flush();
+            if (file.Length % 0x10 > 0)
+            {
+                var padding = new byte[0x10 - file.Length % 0x10];
+                file.Write(padding);
+            }
 
-        file.Flush();
+            file.Flush();
+
+            UpdateNodeArtifacts([node], apexFile);
+        }
+        else
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
+            node.HasArtifact = false;
+
+            _apexProject.Files.Remove(nodePath);
+        }
+
     }
 
-    private async Task OpenArchive()
+    private void OpenArchive()
     {
         var dialog = new OpenFileDialog();
-
+        dialog.Title = "Select an archive";
         dialog.Filter = "AFS files|*.afs|DAR files|*.dar|All files|*.*";
 
         var result = dialog.ShowDialog(this);
 
         if (result is true)
         {
-            await Task.Run(() => LoadArchive(dialog.FileName));
+            LoadArchive(dialog.FileName);
         }
     }
 
     private void LoadArchive(string filename)
     {
+        _archivePath = filename;
+
         var nodes = new List<TreeNode>();
 
 
@@ -271,9 +630,10 @@ public partial class MainWindow : Window
                 {
                     Offset = entry.StreamOffset + entry.Offset,
                     Name = $"{childname}.{entry.Type}",
-                    Path = $"{parentName}\\{childname}",
+                    Path = $"{parentName}\\{childname}" + (entry.Type == "dar" ? "" : $".{entry.Type}"),
                     Size = entry.Size,
-                    Type = entry.Type
+                    Type = entry.Type,
+                    Attribute = $"{entry.Attribute:X2}",
                 };
 
                 if (child.Type == "dar")
@@ -288,50 +648,75 @@ public partial class MainWindow : Window
 
         }
 
-        Dispatcher.Invoke(() => { _model.Nodes = nodes; });
+        var root = new TreeNode()
+        {
+            Name = filename,
+            Type = "root",
+            Path = "/",
+            Children = nodes
+        };
 
-        //Dispatcher.Invoke(() => { _model.Nodes = nodes.OrderBy(d => d.Name); });
+        _model.Nodes = new List<TreeNode>()
+        {
+            root
+        };
+
+
+        Dispatcher.Invoke(() =>
+        {
+            var tvi = FindTviFromObjectRecursive(ArcTreeView, root);
+            tvi.IsExpanded = true;
+
+        });
     }
 
     private void TreeViewItem_Expanded(object sender, RoutedEventArgs e)
     {
-        if (((TreeViewItem)e.OriginalSource).DataContext is TreeNode { Type: "dar" } node && !node.IsLoaded)
+        if (((TreeViewItem)e.OriginalSource).DataContext is TreeNode { Type: "dar" } node)
         {
             try
             {
-                var reader = new DARReader(_source);
-
-                var entries = reader.GetEntries(node.Offset, node.Size);
-
-                var nodes = new List<TreeNode>();
-                var parentName = System.IO.Path.GetFileNameWithoutExtension(node.Name);
-                var index = 0;
-
-                foreach (var entry in entries)
+                if (!node.IsLoaded)
                 {
-                    var childname = $"{parentName}_{index}";
+                    var reader = new DARReader(_source);
 
-                    var child = new TreeNode()
-                    {
-                        Offset = entry.StreamOffset + entry.Offset,
-                        Name = $"{childname}.{entry.Type}",
-                        Path = $"{node.Path}\\{childname}",
-                        Size = entry.Size,
-                        Type = entry.Type
-                    };
+                    var entries = reader.GetEntries(node.Offset, node.Size);
 
-                    if (child.Type == "dar")
+                    var nodes = new List<TreeNode>();
+                    var parentName = System.IO.Path.GetFileNameWithoutExtension(node.Name);
+                    var index = 0;
+
+                    foreach (var entry in entries)
                     {
-                        child.Children = new List<TreeNode>() { new TreeNode() };
+                        var childname = $"{parentName}_{index}";
+
+                        var child = new TreeNode()
+                        {
+                            Offset = entry.StreamOffset + entry.Offset,
+                            Name = $"{childname}.{entry.Type}",
+                            Path = $"{node.Path}\\{childname}",
+                            Size = entry.Size,
+                            Type = entry.Type,
+                            Parent = node,
+                            Attribute = $"{entry.Attribute:X2}",
+                        };
+
+                        if (child.Type == "dar")
+                        {
+                            child.Children = new List<TreeNode>() { new TreeNode() };
+                        }
+
+                        nodes.Add(child);
+
+                        index++;
                     }
 
-                    nodes.Add(child);
-
-                    index++;
+                    node.Children = nodes;
+                    node.IsLoaded = true;
                 }
 
-                node.Children = nodes;
-                node.IsLoaded = true;
+
+                UpdateNodeArtifacts(node.Children);
             }
             catch (Exception exception)
             {
@@ -377,11 +762,14 @@ public partial class MainWindow : Window
         _model.Data = "";
         _model.Image = null;
         _model.EditText = "";
+        _model.Properties.Attribute = "";
 
         _model.ImageVisibility = Visibility.Hidden;
         _model.TextVisibility = Visibility.Visible;
 
         if (node == null) return;
+
+        _model.Properties.Attribute = node.Attribute;
 
         switch (node.Type)
         {
@@ -414,25 +802,29 @@ public partial class MainWindow : Window
                         case "Shift-JIS":
                             _model.Data = DecodeShiftJIS(buffer);
 
-                            if (_apexProject.Files.TryGetValue(node.Path, out var apexFile))
+                            if (_apexProject != null)
                             {
-                                var path = Path.Combine(_apexProject.Path, apexFile.Path + ".txt");
-
-                                if (File.Exists(path))
+                                if (_apexProject.Files.TryGetValue(node.Path, out var apexFile))
                                 {
-                                    _model.EditText = File.ReadAllText(path, Encoding.UTF8);
+                                    var path = Path.Combine(_apexProject.Path, apexFile.Path + ".bin");
+
+                                    if (File.Exists(path))
+                                    {
+                                        _model.EditText = DecodeShiftJIS(File.ReadAllBytes(path));
+                                    }
+
                                 }
-
-                            }
-                            else
-                            {
-                                var path = Path.Combine(_apexProject.Path, node.Path + ".txt");
-
-                                if (File.Exists(path))
+                                else
                                 {
-                                    _model.EditText = File.ReadAllText(path, Encoding.UTF8);
+                                    var path = Path.Combine(_apexProject.Path, node.Path + ".bin");
+
+                                    if (File.Exists(path))
+                                    {
+                                        _model.EditText = DecodeShiftJIS(File.ReadAllBytes(path));
+                                    }
                                 }
                             }
+
 
                             break;
 
@@ -508,7 +900,7 @@ public partial class MainWindow : Window
         BitmapPalette? palette = null;
 
         // Generate a palette for indexed image types
-        if (picture.ImageColorType == 4 || picture.ImageColorType == 5)
+        if (picture.ImageColorType is 4 or 5)
         {
             var colors = new List<Color>(data.ClutData.Length);
 
@@ -536,11 +928,11 @@ public partial class MainWindow : Window
 
         var stride = (int)(picture.ImageWidth * (pixelFormat.BitsPerPixel / 8f));
 
-        var source = BitmapSource.Create(picture.ImageWidth, 
-            picture.ImageHeight, 
+        var source = BitmapSource.Create(picture.ImageWidth,
+            picture.ImageHeight,
             96, 96,
-            pixelFormat, 
-            palette, 
+            pixelFormat,
+            palette,
             data.PixelData,
             stride
             );
@@ -554,6 +946,17 @@ public partial class MainWindow : Window
         var japaneseString = japaneseEncoding.GetString(buffer);
 
         return japaneseString.Replace("\\n", "\n");
+    }
+
+
+    private static Span<byte> EncodeShiftJIS(string text)
+    {
+        text = text.Replace("\r\n", "\\n").Replace("\n", "\\n");
+
+        var japaneseEncoding = Encoding.GetEncoding("Shift-JIS");
+        var japaneseBytes = japaneseEncoding.GetBytes(text);
+
+        return japaneseBytes;
     }
 
     private void UIElement_OnDrop(object sender, DragEventArgs e)
@@ -571,10 +974,117 @@ public partial class MainWindow : Window
 
                     if (extension == ".afs" || extension == ".dar")
                     {
-                        Task.Run(() => LoadArchive(dataString[0]));
+                        LoadArchive(dataString[0]);
                     }
                 }
             }
         }
+    }
+
+    public static TreeViewItem? FindTviFromObjectRecursive(ItemsControl ic, object o)
+    {
+        //Search for the object model in first level children (recursively)
+        if (ic.ItemContainerGenerator.ContainerFromItem(o) is TreeViewItem tvi) return tvi;
+        //Loop through user object models
+        foreach (object i in ic.Items)
+        {
+            //Get the TreeViewItem associated with the iterated object model
+            if (ic.ItemContainerGenerator.ContainerFromItem(i) is TreeViewItem tvi2)
+            {
+                var tvi3 = FindTviFromObjectRecursive(tvi2, o);
+                if (tvi3 != null) return tvi3;
+            }
+        }
+        return null;
+    }
+
+    private void UIElement_OnKeyDown(object sender, KeyEventArgs e)
+    {
+        var converter = new KeyConverter();
+        var str = converter.ConvertToString(e.Key);
+
+        if (_model.Nodes != null)
+        {
+            TreeNode? startNode = _model.SelectedNode;
+            if (startNode == null)
+            {
+                startNode = _model.Nodes.First();
+            }
+
+            var foundStart = false;
+            var foundNode = FindNodeStartsWith(_model.Nodes, startNode, str, 0, ref foundStart);
+
+            if (foundNode != null)
+            {
+                var tvi = FindTviFromObjectRecursive(ArcTreeView, foundNode);
+
+                if (tvi != null)
+                {
+                    tvi.IsSelected = true;
+                }
+
+            }
+
+            _model.SelectedNode = foundNode;
+        }
+    }
+
+    private TreeNode? FindNodeStartsWith(IEnumerable<TreeNode> nodes, TreeNode currentNode, string text, int depth, ref bool foundStart)
+    {
+        var index = 0;
+        foreach (var node in nodes)
+        {
+            if (node == currentNode)
+            {
+                foundStart = true;
+            }
+
+            if (foundStart && node != currentNode && node.Name != null && node.Name.ToLower().StartsWith(text.ToLower()))
+            {
+                return node;
+            }
+
+            var tvi = FindTviFromObjectRecursive(ArcTreeView, node);
+
+            if (node.Children != null && tvi.IsExpanded)
+            {
+                var child = FindNodeStartsWith(node.Children, currentNode, text, depth + 1, ref foundStart);
+
+                if (child != null)
+                {
+                    return child;
+                }
+            }
+
+            index++;
+        }
+
+        return null;
+    }
+
+    private void TranslatedText_OnKeyUp(object sender, KeyEventArgs e)
+    {
+        CalculateCharData();
+    }
+
+    private void CalculateCharData()
+    {
+        var ci = TranslatedText.CaretIndex;
+
+        var s = TranslatedText.Text.Substring(0, ci);
+
+        var lines = s.Split(["\n", "\r\n", "\r"], StringSplitOptions.None);
+
+        var lineCount = lines.Length;
+
+        _model.Page = (lineCount / 4) + 1;
+        _model.Line = ((lineCount - 1) % 4) + 1;
+        _model.Character = ci - s.LastIndexOf("\n") - 1;
+        _model.Bytes = (int)Util.Pad((uint)EncodeShiftJIS(TranslatedText.Text).Length, 0x10);
+    }
+
+    private void TranslatedText_OnGotFocus(object sender, RoutedEventArgs e)
+    {
+        CalculateCharData();
     }
 }
